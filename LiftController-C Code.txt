@@ -1,0 +1,843 @@
+/**** Lift Controller Code - Interaction with Virtual Hardware : Lift Simulation
+Code Author: C. van der Leek 
+****/
+/*------------------------------------------------------------------------------------------*/	
+#if (defined(_SIMULATE_)) 
+    #include <iostream.h>
+	#include <ctype.h>
+	#include "krn/kevents.h" // include statically allocated events
+#endif
+
+#include "krn/kernel.h" // main kernel functions
+#include "lib/buffer.h" // buffer functions
+#include "sim/ports.h" // simulator and port defintions
+#include "math.h"
+
+#ifndcf TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#define INPUT_EVT 0
+#define OUTPUT_EVT 1
+#define NUM_EVTS OUTPUT_EVT+1
+#define LIGHT_INTERRUPT 202 // <-- interrupt number
+#define KEYPAD_INTERRUPT 203
+
+#define TURN_LED_OFF  7
+#define TURN_LED_ON   1
+#define MOTOR         2
+#define DISPLAY       3
+#define OPEN_DOORS    4 
+#define CLOSE_DOORS   5
+
+#define DIRECTION_UP     0
+#define DIRECTION_DOWN   1
+#define MOTOR_OFF        2
+
+#define ALL     0
+#define KILL1   1
+#define KILL2   2
+#define KILL3   4
+#define KILL4   8
+#define KILL5   16
+#define KILL6   32
+#define KILL7   64
+#define KILL8   128
+#define KILL9   1
+#define KILL10  2
+#define KILL11  4
+#define KILL12  8 
+#define KILL13  16
+#define KILL14  32
+#define KILL15  64
+#define KILL16  128
+
+#define SET1  254
+#define SET2  253
+#define SET3  251
+#define SET4  247
+
+#define SET5   239
+#define SET6   223
+#define SET7   191
+#define SET8   127
+#define SET9   254
+#define SET10  253
+#define SET11  251
+#define SET12  247
+#define SET13  239
+#define SET14  223
+#define SET15  191
+#define SET16  127
+
+#define ROW1   0
+#define ROW2   1
+#define ROW3   2
+#define ROW4   3
+
+#define NONE_ACTIVE  255
+#define COLUMN1      239
+#define COLUMN2      223
+#define COLUMN3      191
+
+#define BEAM0        127   
+#define BEAM1        191 
+#define BEAM2        223 
+#define BEAM3        239 
+#define NO_BEAM      255
+
+#define L_BEAMS      2
+#define KEYPAD       1
+
+#define MAY_OPEN      3
+#define MAY_NOT_OPEN  5 
+
+/* ---------------------------------------------------------------------------*/
+// Set up Global Variables
+_ushort u4;
+_ushort u5;
+_ushort u9;
+_ushort temp_u9;
+_ushort current_floor;
+_ushort requested_floor;
+_ushort inside_requests;
+_ushort up_requests;
+_ushort down_requests;
+_ushort gated_requests;
+_ushort service_requests;
+_ushort direction;
+_ushort gate1; 
+_ushort gate2;
+_ushort gate3;
+_ushort gate4;
+_ushort doors;
+/*-------------------------------------------------------------------*/
+class OutputDriver : public RegisterBase
+{ // output driver class for the system public:
+    OutputDriver(_ushort evtnum);
+	// sets up the output driver
+	void _HUGE_CDECL GetEvent(EvtNum, _ulong par1, _ulong par2);
+	~OutputDriver();
+	private:
+	    _ushort outnum;
+};
+
+/*--------------------------------------------------------------------*/
+/*** Now set up the outdriver to execute some action when the 
+output event occurs 		
+***/
+OutputDriver::OutputDriver(_ushort evtnum) : outnum(evtnum)
+{
+    K_EREGISTER(evtnum,*this,OutputDriver::GetEvent,1024,1);
+    // set up the output driver on the event
+}
+
+void _HUGE_CDECL OutputDriver::GetEvent(EvtNum num, _ulong par1, _ulong par2);	
+{
+    if (!par1 && !par2)
+	// Get par1 and par2 and use them to make the hardware execute an action
+    {
+        pgcr = 0x13;
+        // initialise the ports
+        pivr = 202;
+        pacr = 0x06;
+        pbcr = 0x80;
+	    paddr = 0x0f;
+	    pbddr = 0xff;
+        // Port B defaults to output
+        _ushort t;
+        padr=0x03;
+        u9 = 0;
+        pbdr = u9;
+        padr = 5; 		
+        padr = 7;
+            pbdr=0x30;
+            pbdr=0x01;			
+            pbdr=0x07;
+}
+else
+{
+       pbddr=0xff;
+	   switch (par1)
+	   { // par1 states which output to service_requests
+	       case TURN_LED_OFF:
+		       pbddr = 0xff;
+			   padr = 0x07;
+			   switch (par2)
+			   { // par2 represents the number of the LED to be switched off
+			       case ALL: // Turns all LEDs off
+				       u5 = 0xff;
+					   u4 = 0xff;
+					   pbdr = 0xff;
+					   padr = 4; // Clock U4
+					   padr = 6; // Clock U5
+				   break;
+                   case 1:
+                       u4 = u4 | KILL1;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;
+
+                   case 2:
+                       u4 = u4 | KILL2;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 3:
+                       u4 = u4 | KILL3;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 4:
+                       u4 = u4 | KILL4;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 5:
+                       u4 = u4 | KILL5;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 6:
+                       u4 = u4 | KILL6;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 7:
+                       u4 = u4 | KILL7;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 8:
+                       u4 = u4 | KILL8;
+                       pbdr = u4;
+                       padr = 4; // Clock U4
+ 				   break;	   
+                   case 9:
+                       u5 = u5 | KILL9;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 10:
+                       u5 = u5 | KILL10;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 11:
+                       u5 = u5 | KILL11;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 12:
+                       u5 = u5 | KILL12;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 13:
+                       u5 = u5 | KILL13;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 14:
+                       u5 = u5 | KILL14;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 15:
+                       u5 = u5 | KILL15;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+                   case 16:
+                       u5 = u5 | KILL16;
+                       pbdr = u5;
+                       padr = 6; // Clock U5
+ 				   break;	   
+      			   }
+				   padr = 7; // back to defaults
+			break;
+            case TURN_LED_ON:  // LED on
+                padr = 0x03;
+                switch (par2)
+				{
+				   case 1:
+                       u4 = u4 &SET1;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 2:
+                       u4 = u4 &SET2;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 3:
+                       u4 = u4 &SET3;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 4:
+                       u4 = u4 &SET4;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 5:
+                       u4 = u4 &SET5;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 6:
+                       u4 = u4 &SET6;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 7:
+                       u4 = u4 &SET7;
+                       pbdr = u4;
+                       padr = 4; // clock U4					   
+				   case 8:
+                       u4 = u4 &SET8;
+                       pbdr = u4;
+                       padr = 4; // clock U4
+
+				   case 9:
+                       u5 = u5 &SET9;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 10:
+                       u5 = u5 &SET10;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 11:
+                       u5 = u5 &SET11;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 12:
+                       u5 = u5 &SET12;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 13:
+                       u5 = u5 &SET13;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 14:
+                       u5 = u5 &SET14;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 15:
+                       u5 = u5 &SET15;
+                       pbdr = u5;
+                       padr = 6; // clock U5					   
+				   case 16:
+                       u5 = u5 &SET16;
+                       pbdr = u5;
+                       padr = 6; // clock U5
+				   break;	   
+			  }
+			  padr = 7; // back to defaults
+			  pbddr = 0xfF;
+	      break;	
+					   
+// MOTOR ------------------------------------------
+	      case MOTOR:  // MOTOR driver 
+		      pbddr = 0xff;
+			  switch (par2)
+			  { // par2 indicates the action that the motor must execute
+			      case DIRECTION_DOWN:
+				      u9 = u9 | 192; // moves down
+					  pbdr = u9;
+					  padr = 5; // clock U9
+			      break;		  
+			      case DIRECTION_UP:
+				      u9 = u9 | 128; 
+					  u9 = u9 & 191; // moves up
+					  pbdr = u9;
+					  padr = 5; // clock U9
+			      break;		  
+			      case MOTOR_OFF:
+				      u9 = u9 & 63;  // stop motor
+					  pbdr = u9;
+					  padr = 5; // clock U9
+			      break;
+			  }
+			  padr = 7; // back to default
+			  pbddr = 0xff;
+     	  break;
+		  case DISPLAY: // display output driver
+		      pbddr = 0xFF;
+			  switch (par2)
+			  { // set display to the correct floor --> par2 = floor number
+			      case 0: // floor number 0
+				      u9 = u9 & 207;
+				  break;	  
+			      case 1: // floor number 1
+				      u9 = u9 & 223;
+					  u9 = u9 | 16;
+				  break;	  
+			      case 2: // floor number 2
+				      u9 = u9 & 239;
+					  u9 = u9 | 32;
+				  break;	  
+			      case 3: // floor number 3
+				      u9 = u9 | 48;
+				  break;
+              }	
+          }	
+      }	
+    
+      OutputDriver::~OutputDriver()
+      {
+	      K_UNREGISTER(outnum,*this);
+      }	 
+      
+      InputDriver::InputDriver(_ushort evt_base) : evt_base(evt_base)
+      {
+          _uSETHANDLER(LIGHT_INTERRUPT, InputDriver,ISR,*this);
+          _uSETHANDLER(KEYPAD_INTERRUPT, InputDriver,ISR,*this);
+		  
+	  }
+      
+      void _HUGE_CDECL InputDriver::ISR(void)
+      {
+	      _ulong par1,par2;
+		  _ulong pa_in;
+		  _ulong pb_in;
+		  int value;
+		  temp_u9 = u9;
+		  value = 0;
+		  for (int rows=0;rows<4;rows++)
+		  {// repeat 4 times and each time activate one row i.e make it active
+              switch (rows)
+			  {// decide which row to make active
+			      case ROW1: // only row #1 active now
+                      u9 = u9 | 15;
+                      u9 = u9 & SET1;
+                  break;
+			      case ROW2: // only row #2 active now
+                      u9 = u9 | 15;
+                      u9 = u9 & SET2;
+                  break;
+			      case ROW3: // only row #3 active now
+                      u9 = u9 | 15;
+                      u9 = u9 & SET3;
+                  break;
+			      case ROW4: // only row #4 active now
+                      u9 = u9 | 15;
+                      u9 = u9 & SET4;
+                  break;
+			  }
+			  pbdr = u9;
+			  padr = 1;   // turn off interrupt bit and clock U9
+			  padr = 3;   // keep interrupt bit low but unclock U9
+			  pbddr = 0x0f;
+			  padr = 11;
+			  pb_in = pbdr; // get values from keypad columns
+			  pbddr = 0xff;
+			  padr = 3;
+			  pb_in = pb_in | 143;
+			  // blank out bis that do are not affected by keypad
+			  switch (pb_in)
+			  {// see which columns are active, if any -->
+			      case NONE ACTIVE:
+				  break;
+				  case COLUMN1:
+				      value = 1+(3*rows); // switch value = column + 3*rows
+				  break;	  
+				  case COLUMN2:
+				      value = 2+(3*rows); // switch value = column + 3*rows
+				  break;	  
+				  case COLUMN3:
+				      value = 3+(3*rows); // switch value = column + 3*rows
+				  break;
+              }				  
+		  }  
+          padr = 7;
+          pbddr = 0xff;  // back to default
+          if (value !=0)
+          {// send event if key is pressed , else service light beams
+		      Kernel::GenEvent(evt_base + INPUT_EVT,KEYPAD,value);
+		  }	
+          else
+          {
+		      pa_in = padr;
+			  pa_in = pa_in | 15;
+			  // gate out all the bits that are not affected by light beams
+			  switch (pa_in)
+			  {// check for which beam is active, if active turn change
+               // display to correct number and give input event to main
+               // routine with floor number as par2
+                  case NO_BEAM:
+                      Kernel::GenEvent(evt_base + INPUT_EVT,L_BEAMS,20);
+                  break;
+                  case BEAM0:
+                      Kernel::GenEvent(evt_base + OUTPUT_EVT,DISPLAY,0);
+                      Kernel::GenEvent(evt_base + INPUT_EVT,L_BEAMS,0);
+                  break;					  
+                  case BEAM1:
+                      Kernel::GenEvent(evt_base + OUTPUT_EVT,DISPLAY,1);
+                      Kernel::GenEvent(evt_base + INPUT_EVT,L_BEAMS,1);
+                  break;					  
+                  case BEAM2:
+                      Kernel::GenEvent(evt_base + OUTPUT_EVT,DISPLAY,2);
+                      Kernel::GenEvent(evt_base + INPUT_EVT,L_BEAMS,2);
+                  break;					  
+                  case BEAM3:
+                      Kernel::GenEvent(evt_base + OUTPUT_EVT,DISPLAY,3);
+                      Kernel::GenEvent(evt_base + INPUT_EVT,L_BEAMS,3);
+                  break;					  
+			  }
+		  }	
+          u9 = temp_u9;
+		  u9 = u9&0xf0; // reset bits changed
+		  pbdr = u9;
+		  padr = 5;  // clock U9
+		  padr = 7;   // back to default 
+      }	 
+/*--------------------------------------------------------------------------------------*/
+      static _ushort evt_base;
+      // this stores the base of the event range
+      
+      int main(void)
+      {
+	      Kernel(62);
+		  // this starts up the kernel and gives the priority of the main process
+          #if (defined(_SIMULATE_))
+          // this sets up the simulator
+          if (!SetupPorts(0))
+          // --> 1 means use sound --> 0 means no sound 
+          {
+		      cout << "Unable to set up Simulator!! << end1;
+			      return 1;
+		  }
+          #endif
+          direction = DIRECTION_DOWN;
+          up_requests = 0;
+          down_requests = 0;
+		  inside_requests = 0;
+		  service_requests = 0;
+		  current_floor = 2;
+		  // initialise variables
+		  evt_base = Kernel::Events::alloc(NUM_EVTS);
+		  // this gets some free event numbers
+		  Mailbox mailbox(20,2);
+		  // buffer 20 events from 1 source
+		  Kernel::ConfigureQueue(PRIORITY(20) | (evt_base + INPUT_EVT));
+		  // <--- set the Input Queue to priority 20  
+		  Kernel::ConfigureQueue(PRIORITY(30) | (evt_base + INPUT_EVT));
+		  // <--- set the Input Queue to priority 30 
+          mailbox.AddEvent(evt_base+INPUT_EVT);
+          // the mailbox will now get this event
+          #if (defined(_SIMULATE_))
+		  mailbox.AddEvent(KEYBEVT);
+          // to allow quit to always work
+          #endif
+          OutputDriver outdriver(evt_base+OUTPUT_EVT);
+          // <--- set up the output driver  		  
+		  InputDriver indriver(evt_base);
+		  Kernel::GenEvent(evt_base + OUTPUT_EVT,0L,0L);
+		  // reset the hardware
+		  Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,ALL);
+		  // Turn all the LEDs off
+          for(;;) {
+              EvtNum event;
+              _ulong par1,par2;
+  			  if (!mailbox.IsEmpty())
+			      {
+				      event = mailbox.GetEvent(par1,par2);
+					  // an input event from the Input Drivers received
+					  switch (par1)
+					  {// par1 1s  indicate the type of event that it was
+					      case KEYPAD:
+						      switch (par2)
+							  {// par2 represents the switch number
+							      case 1: 
+								      if ((current_floor != 0) || ((u4&KILL5)==0))
+									  {// if not on the same floor as switch
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,1);
+									  }	  
+								      break;		  
+							      case 2: // close doors
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,5);
+										  doors = MAY_OPEN;
+								      break;		  
+							      case 3: 
+								      if ((current_floor != 1) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,13);
+										  down_requests = down_requests | 2;
+									  }	  
+								      break;		  
+							      case 4: 
+								      if ((current_floor != 1) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,2);
+										  inside_requests = inside_requests | 2;
+									  }	  
+								      break;		  
+							      case 5: 
+								      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,6);
+								      break;		  
+							      case 6: 
+								      if ((current_floor != 2) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,10);
+										  up_requests = up_requests | 4;
+									  }	  
+								      break;		  
+							      case 7: 
+								      if ((current_floor != 2) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,3);
+										  inside_requests = inside_requests | 4;
+									  }
+								      break;		  
+							      case 8: 
+								      if ((current_floor != 1) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,12);
+										  up_requests = up_requests | 2;
+									  }	  
+								      break;		  
+							      case 9: 
+								      if ((current_floor != 2) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,11);
+										  down_requests = down_requests | 4;
+									  }	  
+								      break;		  
+							      case 10: 
+								      if ((current_floor != 3) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,4);
+										  inside_requests = inside_requests | 8;
+									  }	  
+								      break;		  
+							      case 11: 
+								      if ((current_floor != 0) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,14);
+										  up_requests = up_requests | 1;
+									  }	  
+								      break;		  
+							      case 12: 
+								      if ((current_floor != 3) || ((u4&KILL5)==0))
+									  {
+									      Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,9);
+										  down_requests = down_requests | 8;
+									  }	  
+									 break;
+								}	 
+								 case L_BEAMS: // light beam event
+								     current floor = par2; //set current floor from par2
+									 doors = MAY_OPEN; // current position = floor status ==> may open door
+								 break;
+						     }
+							 for (int k = 0;k < 4; k++)
+							 {
+							     gate1 = pow(2,current_floor); // gates out all except request for current floor
+								 gate2 = 0xff-gate1; // used to clear requests
+								 gate3 = gate1-1; // gates out all the values above and including the current floor 
+ 								 gate4 = 0xFF ^ (gate1*2) - 1; // gates out all the values below and including the current floor 
+								 switch (direction)
+								 {
+								     case DIRECTION_UP:
+									     service_requests = inside_requests | up_requests;
+										 gated_requests = service_requests & gate1;
+										 // only consider requests on current floor
+										 if ((gated_requests > 0) && (doors == MAY_OPEN))
+										 // test statement: does lift have to stop on this current floor
+										 {
+										     up_requests = up_requests & (gate2);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,current_floor+1);
+										     inside_requests = inside_requests & (gate2);
+											 if (current_floor! = 3)
+											 // ensures that the wrong lights are not turned off
+											 {
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,(14-(2*current_floor)));
+											 }
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,MOTOR,MOTOR_OFF);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,5);
+											 delay(1000);
+										 } // end if on the correct floor
+										 else
+										 // <--- lift does not have to stop on this floor
+										 {
+									     service_requests = inside_requests | down_requests;
+										 gated_requests = service_requests & (gate4);
+										 // only consider requests above the current floor
+										 if (gated_requests > 0)
+										 // check if the lift needs to go further up ?
+										 {
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,5);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,MOTOR,DIRECTION_UP);
+										 }  // terminate here if it is required to move up
+										 else
+										 // nothing to do above ==> thus change direction and do down
+										 {
+										     direction = DIRECTION_DOWN;
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,7);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,15);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,8);
+									         Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,16);
+										 { // end else nothing to do above
+									{ // end else not on the correct floor
+								break; // <--- end for the case : direction up
+								case DIRECTION_DOWN:
+								//
+								    service_requests = inside_requests | down_requests;
+									gated_requests = service_requests & gate1;
+	   							    // only consider requests on current floor
+									
+									if ((gated_requests > 0) && (doors == MAY_OPEN))
+								    // test statement: does lift have to stop on this current floor
+
+									{
+									    down_requests = down_requests & (gate2);
+									    Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,current_floor+1);
+										if (current_floor !=0)
+									    // ensures that the wrong lights are not turned off
+
+										{
+									    Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,(15 - (2*current_floor+1)));
+										}
+										inside_requests = inside_requests & (gate2);
+   	     					            Kernel::GenEvent(evt_base + OUTPUT_EVT,MOTOR,MOTOR_OFF);
+ 							            Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,5);
+										delay(1000);
+								    }// end if on the correct floor
+									else
+								    // <--- lift does not have to stop on this floor
+									
+									{
+									    service_requests = service_requests | up_requests;
+										gated_requests = service_requests & gate3;
+										 // only consider requests above the current floor
+										if (gated_requests > 0)
+										 // check if the lift needs to go further up ?
+
+										{
+ 							                Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,5);
+   	     					                Kernel::GenEvent(evt_base + OUTPUT_EVT,MOTOR,DIRECTION_DOWN);
+											doors = MAY_NOT_OPEN;
+										}  // terminate here if it is required to move down
+										else
+										{
+ 							                Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_OFF,8);
+ 							                Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,16);
+ 							                Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,7);
+ 							                Kernel::GenEvent(evt_base + OUTPUT_EVT,TURN_LED_ON,15);
+										}
+									}
+								break;
+                            }		  
+                   	  }	 
+                      #if (defined(_SIMULATE_))
+ 					  if ((event & 0xffff) == KEYBEVT)
+                      {
+					      if (toupper(par1) == 'Q') return 0;
+				      }
+					  #endif
+				 }	// <--- end of  : if (mailbox is not empty)
+             }
+         }
+		 
+/**** END ---> Lift Controller Code - Interaction with Virtual Hardware : Lift Simulation****/
+/*------------------------------------------------------------------------------------------*/			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+			  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				
+				
+				
+				
+				
+				
+				
+				
+
+
+		
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
